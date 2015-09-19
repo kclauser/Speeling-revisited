@@ -4,67 +4,87 @@ require 'erb'
 
 class CurrentWords < WEBrick::HTTPServlet::AbstractServlet
 
+TEMPLATE = %{
+  <html>
+  <body>
+  <form method="POST" action="/search"
+  <ul>
+  <li><input name="searchword"/><li>
+  </ul>
+  <button type="submit">Search!</button>
+  </form>
+  <a href="/add">"Add word"</a>
+  <ul>
+
+  <% words.each do |hash| %>
+    <li>
+    <%= hash[:word] %>
+    <%= hash[:definition] %>
+
+    </li>
+  <% end %>
+  </ul>
+  </body>
+  </html>
+}
+
   def do_GET(request, response)
 
     if File.exist?("words.yml")
-      words = File.readlines("words.yml")
+      words = YAML::load(File.read("words.yml"))
     else
       words = []
     end
 
+    # The following is jsut for use in the template above
+    # words.each { |hash| puts "word: #{hash[:word]} definition: #{hash[:definition]}" }
+    # this isnt needed at all ever with erb
+    # html = words.map { |hash| "#{hash[:word]} -> #{hash[:definition]}" }.join("<br/>")
+
     response.status = 200
-    response.body = %{
-      <html>
-      <body>
-      <form method="POST" action="/search"
-      <ul>
-      <li><input name="searchword"/><li>
-      </ul>
-      <button type="submit">Search!</button>
-      </form>
-      <a href="/add">"Add word"</a>
-      <p>#{words.join("<br/>")}</p>
-      </body>
-      </html>
-    }
+    response.body = ERB.new(TEMPLATE).result(binding)
   end
 end
 
 class AddWord < WEBrick::HTTPServlet::AbstractServlet
 
+TEMPLATE = %{
+  <html>
+  <body>
+
+  <form method="POST" action="/save">
+  <ul>
+  <li><input name="word"/></li><- word
+  <li><input name="definition"/></li><- definition
+  </ul>
+  <button type="submit">Submit!</button>
+  </form>
+  </body>
+  </html>
+}
+
   def do_GET(request, response)
 
-    if File.exist?("words.yml")
-      words = File.readlines("words.yml")
-    else
-      words = []
-    end
-
     response.status = 200
-    response.body = %{
-      <html>
-      <body>
-
-      <!--#{words.join("<br/")}-->
-      <form method="POST" action="/save">
-      <ul>
-      <li><input name="word"/></li><- word
-      <li><input name="definition"/></li><- definition
-      </ul>
-      <button type="submit">Submit!</button>
-      </form>
-      </body>
-      </html>
-    }
+    response.body = ERB.new(TEMPLATE).result(binding)
 
   end
 end
 
 class SaveWord < WEBrick::HTTPServlet::AbstractServlet
   def do_POST(request, response)
-    File.open("words.yml", "a+") do |file|
-      file.puts "Word: #{request.query["word"]} Definition: #{request.query["definition"]}"
+    if File.exist?("words.yml")
+      dictionary = YAML::load(File.read("words.yml"))
+    else
+      dictionary = []
     end
+
+      word = request.query["word"].to_s
+      definition = request.query["definition"].to_s
+      new_entry = { word: word, definition: definition }
+      dictionary << new_entry
+      File.write("words.yml", dictionary.to_yaml)
+
 
     response.status = 302
     response.header["Location"] = "/"
@@ -73,20 +93,36 @@ class SaveWord < WEBrick::HTTPServlet::AbstractServlet
 end
 
 class SearchWord < WEBrick::HTTPServlet::AbstractServlet
+  TEMPLATE = %{
+    <html>
+    <body>
+    <ul>
+    <% search_result.each do |hash| %>
+      <li>
+      <%= hash[:word] %>
+      <%= hash[:definition] %>
+      </li>
+    <% end %>
+    </ul>
+    </body>
+    </html>
+
+  }
+
   def do_POST(request, response)
-    lines = File.readlines("words.yml")
-    matching_lines = lines.select { |line| line.include?(request.query["searchword"])}
-    html = "<ul>" + (matching_lines.map { |line| "<li>#{line}</li>"}).join + "</ul>"
+    if File.exist?("words.yml")
+      dictionary = YAML::load(File.read("words.yml"))
+    else
+      dictionary = []
+    end
+
+
+search_result = dictionary.select { |hash| hash[:word] == request.query["searchword"] }
+
+    # html = "<ul>" + (search_result.map { |hash| "<li>word: #{hash[:word]} definition: #{hash[:definition]}</li>"}).join + "</ul>"
 
     response.status = 200
-    response.body = %{
-      <html>
-      <body>
-      #{html}
-      </body>
-      </html>
-
-    }
+    response.body = ERB.new(TEMPLATE).result(binding)
   end
 end
 
